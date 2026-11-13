@@ -1,0 +1,20 @@
+{
+  "name": "exampulse-worker",
+  "version": "1.0.0",
+  "description": "ExamPulse Stream Consumers, Answer Persister, and Submission Finaliser",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "@types/pg": "^8.11.2",
+    "typescript": "^5.3.3"
+  }
+}

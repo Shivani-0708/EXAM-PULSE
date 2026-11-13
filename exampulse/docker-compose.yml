@@ -1,0 +1,192 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: exampulse-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: exampulse
+      POSTGRES_USER: exampulse_user
+      POSTGRES_PASSWORD: exampulse_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exampulse_user -d exampulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - exampulse-network
+
+  redis-master:
+    image: redis:7-alpine
+    container_name: exampulse-redis-master
+    restart: always
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_master_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+    networks:
+      - exampulse-network
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: exampulse-redis-replica
+    restart: always
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis-replica.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_replica_data:/data
+    ports:
+      - "6380:6379"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+    networks:
+      - exampulse-network
+
+  app1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exampulse-app1
+    restart: always
+    environment:
+      INSTANCE_ID: app1
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://exampulse_user:exampulse_password@postgres:5432/exampulse
+      REDIS_HOST: redis-master
+      REDIS_PORT: 6379
+      REDIS_REPLICA_HOST: redis-replica
+      REDIS_REPLICA_PORT: 6379
+      JWT_SECRET: supersecret_exampulse_jwt_signing_key_2026
+      DURABILITY_MODE: aof_wait # options: aof_wait, aof_only, fsync_always
+      WAIT_TIMEOUT_MS: 50
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    networks:
+      - exampulse-network
+
+  app2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exampulse-app2
+    restart: always
+    environment:
+      INSTANCE_ID: app2
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://exampulse_user:exampulse_password@postgres:5432/exampulse
+      REDIS_HOST: redis-master
+      REDIS_PORT: 6379
+      REDIS_REPLICA_HOST: redis-replica
+      REDIS_REPLICA_PORT: 6379
+      JWT_SECRET: supersecret_exampulse_jwt_signing_key_2026
+      DURABILITY_MODE: aof_wait
+      WAIT_TIMEOUT_MS: 50
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    networks:
+      - exampulse-network
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: exampulse-worker
+    restart: always
+    environment:
+      WORKER_ID: worker-1
+      DATABASE_URL: postgres://exampulse_user:exampulse_password@postgres:5432/exampulse
+      REDIS_HOST: redis-master
+      REDIS_PORT: 6379
+      BATCH_SIZE: 100
+      BLOCK_TIME_MS: 2000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+    networks:
+      - exampulse-network
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: exampulse-ai-service
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+    networks:
+      - exampulse-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: exampulse-frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    networks:
+      - exampulse-network
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: exampulse-nginx
+    restart: always
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app1
+      - app2
+      - frontend
+      - ai-service
+    networks:
+      - exampulse-network
+
+networks:
+  exampulse-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_master_data:
+  redis_replica_data:

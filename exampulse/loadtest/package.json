@@ -1,0 +1,21 @@
+{
+  "name": "exampulse-loadtest",
+  "version": "1.0.0",
+  "description": "ExamPulse High-Throughput Load Testing and Failure Simulation Suite",
+  "main": "run_all.js",
+  "scripts": {
+    "test": "node run_all.js",
+    "demo": "node run_all.js",
+    "burst": "node burst_start.js",
+    "autosave": "node autosave_load.js",
+    "timer": "node timer_skew.js",
+    "submit": "node duplicate_submit.js",
+    "final-rush": "node final_minute_rush.js",
+    "second-device": "node second_device.js",
+    "kill-instance": "node kill_instance.js",
+    "redis-restart": "node redis_restart.js",
+    "leaderboard": "node leaderboard_bench.js",
+    "crash-browser": "node crash_browser.js",
+    "ai-down": "node ai_down.js"
+  }
+}
